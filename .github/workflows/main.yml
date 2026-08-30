@@ -25,7 +25,7 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Auto Locate Project & Build APK
+      - name: Auto Setup Android & Build APK
         run: |
           if [ -f "pubspec.yaml" ]; then
             TARGET_DIR="."
@@ -34,8 +34,16 @@ jobs:
           else
             TARGET_DIR=$(find . -name "pubspec.yaml" -exec dirname {} \; | head -n 1)
           fi
-          echo "Building Flutter APK in: $TARGET_DIR"
+          echo "Project Directory: $TARGET_DIR"
           cd "$TARGET_DIR"
+          
+          # Auto-generate complete official Android Gradle wrapper
+          flutter create . --org com.abdulrehman --platforms android
+          
+          # Set minSdkVersion to 24 for FFmpeg compatibility
+          sed -i 's/minSdkVersion = .*/minSdkVersion = 24/' android/app/build.gradle 2>/dev/null || true
+          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 24/' android/app/build.gradle 2>/dev/null || true
+          
           flutter pub get
           flutter build apk --release --no-tree-shake-icons
 
