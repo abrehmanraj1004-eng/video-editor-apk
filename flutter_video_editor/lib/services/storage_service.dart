@@ -1,5 +1,6 @@
 import 'dart:io';
-import 'package:gal/gal.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import 'package:permission_handler/permission_handler.dart';
 
 class StorageService {
@@ -15,15 +16,29 @@ class StorageService {
     return true;
   }
 
-  /// Saves the processed video directly into the phone's native Gallery / Camera Roll.
+  /// Saves the processed video directly into the phone's native Gallery / Download folder.
   static Future<bool> saveVideoToGallery(String videoPath) async {
     try {
-      final hasAccess = await Gal.hasAccess();
-      if (!hasAccess) {
-        await Gal.requestAccess();
+      final file = File(videoPath);
+      if (!await file.exists()) return false;
+
+      Directory? saveDir;
+      if (Platform.isAndroid) {
+        saveDir = Directory('/storage/emulated/0/Download');
+        if (!await saveDir.exists()) {
+          saveDir = await getExternalStorageDirectory();
+        }
+      } else {
+        saveDir = await getApplicationDocumentsDirectory();
       }
-      await Gal.putVideo(videoPath, album: 'AbdulRehman Editor');
-      return true;
+
+      if (saveDir != null) {
+        final filename = p.basename(videoPath);
+        final destPath = p.join(saveDir.path, filename);
+        await file.copy(destPath);
+        return true;
+      }
+      return false;
     } catch (e) {
       return false;
     }
