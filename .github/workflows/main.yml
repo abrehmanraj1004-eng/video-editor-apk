@@ -37,7 +37,7 @@ jobs:
           echo "Project Directory: $TARGET_DIR"
           cd "$TARGET_DIR"
           
-          # Auto-generate complete official Android Gradle wrapper
+          # Auto-generate complete official Android wrapper & Gradle
           flutter create . --org com.abdulrehman --platforms android
           
           # Set minSdkVersion to 24 for FFmpeg compatibility
