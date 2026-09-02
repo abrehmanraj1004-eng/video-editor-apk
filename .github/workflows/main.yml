@@ -38,8 +38,9 @@ jobs:
           echo "Project Directory: $TARGET_DIR"
           cd "$TARGET_DIR"
           
-          # Generate Android project structure
-          flutter create . --org com.abdulrehman --platforms android
+          # Clean recreation with exact matching project name
+          rm -rf android
+          flutter create . --org com.abdulrehman --project-name videoeditor --platforms android
           
           # Fix Gradle Properties & AGP settings
           mkdir -p android
@@ -53,6 +54,9 @@ jobs:
           # Set minSdkVersion to 24 for FFmpeg compatibility
           sed -i 's/minSdkVersion = .*/minSdkVersion = 24/' android/app/build.gradle 2>/dev/null || true
           sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 24/' android/app/build.gradle 2>/dev/null || true
+          
+          # Add permissions to AndroidManifest.xml
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>\n    <uses-permission android:name="android.permission.WAKE_LOCK"/>' android/app/src/main/AndroidManifest.xml
           
           flutter pub get
           flutter build apk --release --no-tree-shake-icons
