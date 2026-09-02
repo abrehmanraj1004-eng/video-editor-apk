@@ -22,7 +22,6 @@ jobs:
       - name: Set up Flutter SDK
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.5'
           channel: 'stable'
           cache: true
 
@@ -38,11 +37,11 @@ jobs:
           echo "Project Directory: $TARGET_DIR"
           cd "$TARGET_DIR"
           
-          # Clean recreation with exact matching project name
+          # Clean recreation with exact project name
           rm -rf android
           flutter create . --org com.abdulrehman --project-name videoeditor --platforms android
           
-          # Fix Gradle Properties & AGP settings
+          # Fix Gradle Properties
           mkdir -p android
           cat << 'EOF' > android/gradle.properties
           org.gradle.jvmargs=-Xmx4G
