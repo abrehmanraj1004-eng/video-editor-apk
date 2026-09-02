@@ -22,6 +22,7 @@ jobs:
       - name: Set up Flutter SDK
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.24.5'
           channel: 'stable'
           cache: true
 
@@ -37,8 +38,17 @@ jobs:
           echo "Project Directory: $TARGET_DIR"
           cd "$TARGET_DIR"
           
-          # Auto-generate complete official Android wrapper & Gradle
+          # Generate Android project structure
           flutter create . --org com.abdulrehman --platforms android
+          
+          # Fix Gradle Properties & AGP settings
+          mkdir -p android
+          cat << 'EOF' > android/gradle.properties
+          org.gradle.jvmargs=-Xmx4G
+          android.useAndroidX=true
+          android.enableJetifier=true
+          android.defaults.buildfeatures.buildconfig=true
+          EOF
           
           # Set minSdkVersion to 24 for FFmpeg compatibility
           sed -i 's/minSdkVersion = .*/minSdkVersion = 24/' android/app/build.gradle 2>/dev/null || true
