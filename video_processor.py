@@ -36,34 +36,54 @@ def get_ffmpeg_path():
 
 def get_video_info_from_url(url):
     """
-    Extract YouTube video information (title, duration, thumbnail, author) without downloading.
+    Extract YouTube video information (title, duration, thumbnail, author) with cloud 403 bypass.
     """
-    ydl_opts = {
-        'quiet': True,
-        'no_warnings': True,
-        'skip_download': True,
-        'extractor_args': {'youtube': {'player_client': ['android', 'ios', 'web']}},
-        'nocheckcertificate': True,
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-        return {
-            'title': info.get('title', 'Unknown Title'),
-            'duration': info.get('duration', 0),
-            'duration_formatted': format_time(info.get('duration', 0)),
-            'thumbnail': info.get('thumbnail', ''),
-            'uploader': info.get('uploader', 'Unknown Creator'),
-            'view_count': info.get('view_count', 0),
-            'id': info.get('id', '')
-        }
+    clients_to_try = [
+        ['ios'],
+        ['android'],
+        ['mweb'],
+        ['tv_embedded'],
+        ['web']
+    ]
+    
+    last_err = None
+    for client in clients_to_try:
+        try:
+            ydl_opts = {
+                'quiet': True,
+                'no_warnings': True,
+                'skip_download': True,
+                'extractor_args': {'youtube': {'player_client': client}},
+                'nocheckcertificate': True,
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                }
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                return {
+                    'title': info.get('title', 'Unknown Title'),
+                    'duration': info.get('duration', 0),
+                    'duration_formatted': format_time(info.get('duration', 0)),
+                    'thumbnail': info.get('thumbnail', ''),
+                    'uploader': info.get('uploader', 'Unknown Creator'),
+                    'view_count': info.get('view_count', 0),
+                    'id': info.get('id', '')
+                }
+        except Exception as e:
+            last_err = e
+            continue
+
+    raise Exception(f"Unable to fetch YouTube details: {last_err}")
 
 def download_youtube_video(url, output_dir, resolution='best', progress_callback=None, cancel_check=None):
     """
-    Download YouTube video to output_dir with progress tracking and robust fallback.
+    Download YouTube video with automatic cloud 403 bypass (iOS -> Android -> TV fallback).
     """
     os.makedirs(output_dir, exist_ok=True)
     
-    # Clean any stale .part or .ytdl files that cause HTTP 416 range error
+    # Clean stale .part or .ytdl files
     try:
         for f in os.listdir(output_dir):
             if f.endswith('.part') or f.endswith('.ytdl'):
@@ -110,44 +130,71 @@ def download_youtube_video(url, output_dir, resolution='best', progress_callback
                     'message': "Download complete. Processing video..."
                 })
 
-    # Robust format selection with multi-stream and single-stream fallbacks
-    if resolution == '1080':
-        fmt = 'bv*[height<=1080]+ba/b[height<=1080]/best'
-    elif resolution == '720':
-        fmt = 'bv*[height<=720]+ba/b[height<=720]/best'
-    elif resolution == '480':
-        fmt = 'bv*[height<=480]+ba/b[height<=480]/best'
-    else:
-        fmt = 'bv*+ba/b/best'
-
     out_template = os.path.join(output_dir, '%(title).80s [%(id)s].%(ext)s')
 
-    ydl_opts = {
-        'format': fmt,
-        'outtmpl': out_template,
-        'merge_output_format': 'mp4',
-        'progress_hooks': [hook],
-        'quiet': True,
-        'no_warnings': True,
-        'nocheckcertificate': True,
-        'extractor_args': {'youtube': {'player_client': ['android', 'ios', 'web']}},
-        'retries': 10,
-        'fragment_retries': 10,
-        'http_chunk_size': 10485760,
-    }
+    # Multi-client configurations to guarantee 403 bypass on Cloud servers
+    client_strategies = [
+        {
+            'client': ['ios'],
+            'ua': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+            'fmt': 'best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best'
+        },
+        {
+            'client': ['android'],
+            'ua': 'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36',
+            'fmt': 'best[ext=mp4]/best'
+        },
+        {
+            'client': ['tv_embedded'],
+            'ua': 'Mozilla/5.0 (SmartHub; SMART-TV; U; Linux/SmartTV) AppleWebKit/538.1+ (KHTML, like Gecko) TV Safari/538.1+',
+            'fmt': 'best'
+        },
+        {
+            'client': ['mweb', 'web'],
+            'ua': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+            'fmt': 'bv*+ba/b/best'
+        }
+    ]
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        final_filename = ydl.prepare_filename(info)
-        base, _ = os.path.splitext(final_filename)
-        final_mp4 = base + ".mp4"
-        if os.path.exists(final_mp4):
-            return final_mp4
-        if os.path.exists(final_filename):
-            return final_filename
-        if downloaded_file and os.path.exists(downloaded_file[0]):
-            return downloaded_file[0]
-        return final_filename
+    last_exc = None
+    for strategy in client_strategies:
+        try:
+            ydl_opts = {
+                'format': strategy['fmt'],
+                'outtmpl': out_template,
+                'merge_output_format': 'mp4',
+                'progress_hooks': [hook],
+                'quiet': True,
+                'no_warnings': True,
+                'nocheckcertificate': True,
+                'extractor_args': {'youtube': {'player_client': strategy['client']}},
+                'http_headers': {
+                    'User-Agent': strategy['ua'],
+                    'Accept-Language': 'en-US,en;q=0.9',
+                },
+                'retries': 5,
+                'fragment_retries': 5,
+            }
+
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                final_filename = ydl.prepare_filename(info)
+                base, _ = os.path.splitext(final_filename)
+                final_mp4 = base + ".mp4"
+                if os.path.exists(final_mp4):
+                    return final_mp4
+                if os.path.exists(final_filename):
+                    return final_filename
+                if downloaded_file and os.path.exists(downloaded_file[0]):
+                    return downloaded_file[0]
+                return final_filename
+        except Exception as err:
+            last_exc = err
+            if "cancelled" in str(err).lower():
+                raise err
+            continue
+
+    raise Exception(f"Unable to download video data from YouTube: {last_exc}")
 
 def get_video_metadata(file_path):
     """
@@ -217,9 +264,6 @@ def get_video_metadata(file_path):
 def build_atempo_filter(speed):
     """
     Constructs FFmpeg atempo chain because atempo only supports 0.5 to 100.0.
-    For example: 0.25x -> atempo=0.5,atempo=0.5
-                 0.125x -> atempo=0.5,atempo=0.5,atempo=0.5
-                 2.0x -> atempo=2.0
     """
     if speed <= 0:
         speed = 0.1
@@ -234,20 +278,14 @@ def build_atempo_filter(speed):
     filters.append(f"atempo={current:.4f}")
     return ",".join(filters)
 
-def calculate_auto_target_duration_segments(duration, target_duration=60.0, slowdown_start_pct=0.60):
+def calculate_auto_target_duration_segments(duration, target_duration=61.0, slowdown_start_pct=0.60):
     """
-    Calculates CapCut curve segments so that a video shorter than target_duration (e.g. 60s)
+    Calculates curve segments so that a video shorter than target_duration (e.g. 61s)
     is smoothly slowed down at the end to make the total output length EXACTLY target_duration.
-    
-    If duration >= target_duration, returns a single 1.0x segment (no change).
     """
     if duration >= target_duration - 0.05:
         return [{'start': 0.0, 'end': duration, 'speed': 1.0}], False
 
-    # Stage 1: 0 to p1 (e.g. 50% of video) -> 1.0x (normal speed)
-    # Stage 2: p1 to p2 (e.g. 50% to 70% of video) -> smooth transition ramp
-    # Stage 3: p2 to duration (e.g. 70% to 100% of video) -> slow_factor
-    
     p1 = max(0.0, (slowdown_start_pct - 0.15)) * duration
     p2 = min(0.98, slowdown_start_pct) * duration
     
@@ -255,7 +293,7 @@ def calculate_auto_target_duration_segments(duration, target_duration=60.0, slow
     t_ramp = p2 - p1
     t_slow = duration - p2
     
-    # Solve for s_end using binary search in (0.01, 1.0)
+    # Solve for s_end using binary search
     low = 0.01
     high = 0.9999
     
@@ -283,25 +321,19 @@ def calculate_auto_target_duration_segments(duration, target_duration=60.0, slow
 def calculate_curve_segments(duration, preset='auto_60s', custom_params=None):
     """
     Calculates time segments and speeds based on CapCut curve speed ramping.
-    Returns list of dicts: [{'start': t0, 'end': t1, 'speed': s}, ...]
     """
     if duration <= 0:
-        duration = 10.0 # fallback
+        duration = 10.0
 
     segments = []
 
-    if preset == 'auto_60s':
-        target_dur = custom_params.get('target_duration', 60.0) if custom_params else 60.0
+    if preset == 'auto_60s' or preset == 'auto_61s':
+        target_dur = custom_params.get('target_duration', 61.0) if custom_params else 61.0
         split_pct = (custom_params.get('split_percent', 60) if custom_params else 60) / 100.0
-        segs, was_slowed = calculate_auto_target_duration_segments(duration, target_dur, split_pct)
+        segs, _ = calculate_auto_target_duration_segments(duration, target_dur, split_pct)
         return segs
 
     elif preset == 'end_slowdown':
-        # CapCut Flash-Out / End Slowdown:
-        # 0% - 50%: Normal speed 1.0x
-        # 50% - 70%: Smooth ramp 0.65x
-        # 70% - 85%: Slow 0.4x
-        # 85% - 100%: Dramatic slow-mo 0.2x
         slow_factor = 0.22 if not custom_params else custom_params.get('end_speed', 0.22)
         p1 = 0.50 * duration
         p2 = 0.70 * duration
@@ -316,7 +348,6 @@ def calculate_curve_segments(duration, preset='auto_60s', custom_params=None):
         ]
 
     elif preset == 'hero_bullet':
-        # Hero / Bullet: Fast (1.5x) -> Slow climax (0.25x) -> Fast (1.4x) -> Slow end (0.3x)
         p1 = 0.20 * duration
         p2 = 0.35 * duration
         p3 = 0.65 * duration
@@ -332,7 +363,6 @@ def calculate_curve_segments(duration, preset='auto_60s', custom_params=None):
         ]
 
     elif preset == 'flash_in':
-        # Flash In: Super slow start (0.25x) -> Ramp up -> High speed finish (1.5x)
         p1 = 0.25 * duration
         p2 = 0.50 * duration
         p3 = duration
@@ -343,7 +373,6 @@ def calculate_curve_segments(duration, preset='auto_60s', custom_params=None):
         ]
 
     elif preset == 'montage':
-        # Montage / Rhythm Curve: Fast -> Slow -> Fast -> Slow
         p1 = 0.25 * duration
         p2 = 0.50 * duration
         p3 = 0.75 * duration
@@ -390,33 +419,27 @@ def apply_speed_curve(input_video_path, output_video_path, preset='end_slowdown'
                       smooth_fps=True, progress_callback=None, cancel_check=None):
     """
     Applies CapCut-style speed curve to the video using FFmpeg.
-    
-    audio_mode: 'keep_pitch' (natural pitch preservation), 'mute' (silent), 'none'
-    smooth_fps: True to output at smooth 60fps for silky slow motion
     """
     meta = get_video_metadata(input_video_path)
     total_duration = meta['duration']
     has_audio = meta['has_audio'] and (audio_mode != 'mute')
     
-    target_dur = custom_params.get('target_duration', 60.0) if custom_params else 60.0
-    if preset == 'auto_60s' and total_duration >= target_dur - 0.1:
+    target_dur = custom_params.get('target_duration', 61.0) if custom_params else 61.0
+    if (preset == 'auto_60s' or preset == 'auto_61s') and total_duration >= target_dur - 0.1:
         if progress_callback:
             progress_callback({
                 'status': 'skipped',
                 'percent': 100.0,
-                'message': f"Video is {total_duration:.1f}s (>= {target_dur:.0f}s). Duration already met, saving original video without slow-mo!"
+                'message': f"Video is {total_duration:.1f}s (>= {target_dur:.0f}s). Duration already met!"
             })
         shutil.copy2(input_video_path, output_video_path)
         return output_video_path
 
     segments = calculate_curve_segments(total_duration, preset, custom_params)
-    
-    # Calculate estimated output duration
     est_output_duration = sum((seg['end'] - seg['start']) / seg['speed'] for seg in segments)
 
     ffmpeg = get_ffmpeg_path()
     
-    # Build filter_complex string
     v_segments = []
     a_segments = []
     filter_parts = []
@@ -426,13 +449,11 @@ def apply_speed_curve(input_video_path, output_video_path, preset='end_slowdown'
         end = seg['end']
         speed = seg['speed']
         
-        # Video segment: trim, reset PTS, set speed multiplier (1/speed)
         v_name = f"v{i}"
         v_filter = f"[0:v]trim=start={start:.4f}:end={end:.4f},setpts=(PTS-STARTPTS)/{speed:.4f}[{v_name}]"
         filter_parts.append(v_filter)
         v_segments.append(f"[{v_name}]")
         
-        # Audio segment
         if has_audio:
             a_name = f"a{i}"
             atempo_str = build_atempo_filter(speed)
@@ -441,67 +462,38 @@ def apply_speed_curve(input_video_path, output_video_path, preset='end_slowdown'
             a_segments.append(f"[{a_name}]")
 
     num_segs = len(segments)
-    
-    # Concat video
     concat_v = "".join(v_segments) + f"concat=n={num_segs}:v=1:a=0[v_cat]"
     filter_parts.append(concat_v)
     
     final_v_label = "[v_cat]"
-    
-    # Smooth 60fps filter if enabled
     if smooth_fps:
-        filter_parts.append(f"[v_cat]fps=60[v_smooth]")
-        final_v_label = "[v_smooth]"
+        # Motion Interpolation
+        filter_parts.append("[v_cat]minterpolate=fps=60:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1[v_60fps]")
+        final_v_label = "[v_60fps]"
 
-    # Concat audio if present
-    final_a_label = ""
+    cmd = [
+        ffmpeg,
+        "-y",
+        "-i", input_video_path,
+        "-filter_complex", ";".join(filter_parts),
+        "-map", final_v_label
+    ]
+
     if has_audio:
         concat_a = "".join(a_segments) + f"concat=n={num_segs}:v=0:a=1[a_cat]"
         filter_parts.append(concat_a)
-        final_a_label = "[a_cat]"
+        cmd.extend(["-map", "[a_cat]", "-c:a", "aac", "-b:a", "192k"])
 
-    filter_complex_str = ";".join(filter_parts)
-
-    # Assemble full FFmpeg command
-    cmd = [
-        ffmpeg,
-        "-y", # overwrite output
-        "-i", input_video_path,
-        "-filter_complex", filter_complex_str,
-        "-map", final_v_label,
-    ]
-    
-    if has_audio:
-        cmd.extend(["-map", final_a_label, "-c:a", "aac", "-b:a", "192k"])
-    else:
-        cmd.extend(["-an"]) # No audio
-
-    # Fast and high quality video encoding (H.264, crf 19, fast preset)
     cmd.extend([
         "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "19",
+        "-preset", "ultrafast",
+        "-crf", "20",
         "-pix_fmt", "yuv420p",
         "-movflags", "+faststart",
         output_video_path
     ])
 
-    # Execute FFmpeg process with stderr monitoring for live progress
-    startupinfo = None
-    if sys.platform == "win32":
-        startupinfo = subprocess.STARTUPINFO()
-        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        startupinfo.wShowWindow = 0 # SW_HIDE
-
-    process = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        universal_newlines=True,
-        startupinfo=startupinfo,
-        encoding='utf-8',
-        errors='replace'
-    )
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
 
     time_pattern = re.compile(r"time=(\d+):(\d+):(\d+\.\d+)")
 
@@ -509,36 +501,29 @@ def apply_speed_curve(input_video_path, output_video_path, preset='end_slowdown'
         if cancel_check and cancel_check():
             process.kill()
             raise Exception("Processing cancelled by user.")
-
+            
         line = process.stderr.readline()
         if not line and process.poll() is not None:
             break
-
-        if line:
+            
+        if "time=" in line:
             match = time_pattern.search(line)
             if match and est_output_duration > 0:
                 h, m, s = match.groups()
                 current_time = int(h) * 3600 + int(m) * 60 + float(s)
-                progress_pct = min(99.0, (current_time / est_output_duration) * 100)
+                pct = min(99.0, (current_time / est_output_duration) * 100.0)
                 if progress_callback:
                     progress_callback({
-                        'status': 'rendering',
-                        'percent': progress_pct,
-                        'current_time': current_time,
-                        'total_time': est_output_duration,
-                        'message': f"Rendering CapCut Speed Curve: {progress_pct:.1f}% ({format_time(current_time)} / {format_time(est_output_duration)})"
+                        'status': 'processing',
+                        'percent': pct,
+                        'message': f"Applying Speed Curve: {pct:.1f}% rendered..."
                     })
 
-    ret_code = process.poll()
-    if ret_code != 0:
-        err = process.stderr.read()
-        raise RuntimeError(f"FFmpeg processing failed (Code {ret_code}): {err[-500:]}")
+    retcode = process.poll()
+    if retcode != 0:
+        raise Exception("FFmpeg processing failed to complete.")
 
-    if progress_callback:
-        progress_callback({
-            'status': 'done',
-            'percent': 100.0,
-            'message': "Video successfully edited and saved!"
-        })
+    if not os.path.exists(output_video_path):
+        raise Exception("Output video file was not generated.")
 
     return output_video_path

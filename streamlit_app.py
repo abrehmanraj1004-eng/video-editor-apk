@@ -81,7 +81,7 @@ st.markdown("""
             <h1 class="header-title">AbdulRehman Editor</h1>
             <span class="pro-badge">PRO AI</span>
         </div>
-        <p class="header-subtitle">AI Speed Curve • Auto 60s • 60 FPS Motion Interpolation</p>
+        <p class="header-subtitle">AI Speed Curve • Auto 61s • 60 FPS Motion Interpolation</p>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -119,7 +119,7 @@ st.markdown("---")
 # Speed Curve Preset
 st.subheader("⚡ Speed Curve Presets")
 preset_options = {
-    "🎯 Auto 60s (Slowdown End if <60s, Keep if >=60s)": "auto_60s",
+    "🎯 Auto 61s (Slowdown End if <61s, Keep if >=61s)": "auto_60s",
     "⚡ CapCut Flash-Out (Smooth Slow-mo End)": "end_slowdown",
     "🦸 Hero / Bullet Ramp (1.5x -> 0.25x -> 1.4x)": "hero_bullet",
     "💥 Flash In (0.25x Slow Start -> 1.5x Fast Finish)": "flash_in",
@@ -131,13 +131,13 @@ selected_preset_label = st.radio("Choose Preset:", list(preset_options.keys()))
 preset_key = preset_options[selected_preset_label]
 
 # Sliders
-target_duration = 60.0
+target_duration = 61.0
 start_speed = 1.0
 end_speed = 0.22
 slowdown_point = 60.0
 
 if preset_key == "auto_60s":
-    target_duration = st.slider("Target Video Duration (Seconds):", min_value=10, max_value=120, value=60)
+    target_duration = st.slider("Target Video Duration (Seconds):", min_value=10, max_value=120, value=61)
 elif preset_key == "custom":
     col1, col2 = st.columns(2)
     with col1:
