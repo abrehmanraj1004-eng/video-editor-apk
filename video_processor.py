@@ -39,10 +39,10 @@ def get_video_info_from_url(url):
     Extract YouTube video information (title, duration, thumbnail, author) with cloud 403 bypass.
     """
     clients_to_try = [
+        ['visionos', 'ios'],
         ['ios'],
         ['android'],
         ['mweb'],
-        ['tv_embedded'],
         ['web']
     ]
     
@@ -150,7 +150,7 @@ def download_youtube_video(url, output_dir, resolution='best', progress_callback
                 'quiet': True,
                 'no_warnings': True,
                 'nocheckcertificate': True,
-                'extractor_args': {'youtube': {'player_client': ['android', 'ios', 'web']}},
+                'extractor_args': {'youtube': {'player_client': ['visionos', 'ios', 'android', 'web']}},
                 'retries': 5,
                 'fragment_retries': 5,
             }
