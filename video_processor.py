@@ -79,7 +79,7 @@ def get_video_info_from_url(url):
 
 def download_youtube_video(url, output_dir, resolution='best', progress_callback=None, cancel_check=None):
     """
-    Download YouTube video with automatic cloud 403 bypass (iOS -> Android -> TV fallback).
+    Download YouTube video with automatic multi-client fallback (Android + iOS + Web) and format resilience.
     """
     os.makedirs(output_dir, exist_ok=True)
     
@@ -132,49 +132,30 @@ def download_youtube_video(url, output_dir, resolution='best', progress_callback
 
     out_template = os.path.join(output_dir, '%(title).80s [%(id)s].%(ext)s')
 
-    # Multi-client configurations to guarantee 403 bypass and format availability
-    client_strategies = [
-        {
-            'client': ['android'],
-            'ua': 'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36',
-            'fmt': 'bestvideo*+bestaudio/best'
-        },
-        {
-            'client': ['ios'],
-            'ua': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
-            'fmt': 'best'
-        },
-        {
-            'client': ['tv_embedded'],
-            'ua': 'Mozilla/5.0 (SmartHub; SMART-TV; U; Linux/SmartTV) AppleWebKit/538.1+ (KHTML, like Gecko) TV Safari/538.1+',
-            'fmt': 'bestvideo*+bestaudio/best'
-        },
-        {
-            'client': ['web', 'mweb'],
-            'ua': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-            'fmt': 'bv*+ba/b/best'
-        }
+    # Verified multi-format fallback configs
+    format_attempts = [
+        'bv*+ba/b/best',
+        'bestvideo+bestaudio/best',
+        'best',
+        None
     ]
 
     last_exc = None
-    for strategy in client_strategies:
+    for fmt in format_attempts:
         try:
             ydl_opts = {
-                'format': strategy['fmt'],
                 'outtmpl': out_template,
                 'merge_output_format': 'mp4',
                 'progress_hooks': [hook],
                 'quiet': True,
                 'no_warnings': True,
                 'nocheckcertificate': True,
-                'extractor_args': {'youtube': {'player_client': strategy['client']}},
-                'http_headers': {
-                    'User-Agent': strategy['ua'],
-                    'Accept-Language': 'en-US,en;q=0.9',
-                },
+                'extractor_args': {'youtube': {'player_client': ['android', 'ios', 'web']}},
                 'retries': 5,
                 'fragment_retries': 5,
             }
+            if fmt:
+                ydl_opts['format'] = fmt
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
