@@ -452,6 +452,10 @@ def apply_speed_curve(input_video_path, output_video_path, preset='end_slowdown'
         filter_parts.append("[v_cat]fps=fps=60,minterpolate=fps=60:mi_mode=blend[v_60fps]")
         final_v_label = "[v_60fps]"
 
+    if has_audio:
+        concat_a = "".join(a_segments) + f"concat=n={num_segs}:v=0:a=1[a_cat]"
+        filter_parts.append(concat_a)
+
     cmd = [
         ffmpeg,
         "-y",
@@ -461,8 +465,6 @@ def apply_speed_curve(input_video_path, output_video_path, preset='end_slowdown'
     ]
 
     if has_audio:
-        concat_a = "".join(a_segments) + f"concat=n={num_segs}:v=0:a=1[a_cat]"
-        filter_parts.append(concat_a)
         cmd.extend(["-map", "[a_cat]", "-c:a", "aac", "-b:a", "192k"])
 
     cmd.extend([
