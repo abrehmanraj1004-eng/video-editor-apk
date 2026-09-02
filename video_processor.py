@@ -448,8 +448,8 @@ def apply_speed_curve(input_video_path, output_video_path, preset='end_slowdown'
     
     final_v_label = "[v_cat]"
     if smooth_fps:
-        # Motion Interpolation
-        filter_parts.append("[v_cat]minterpolate=fps=60:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1[v_60fps]")
+        # Fast & Silky smooth 60fps filter without OOM crashes
+        filter_parts.append("[v_cat]fps=fps=60,minterpolate=fps=60:mi_mode=blend[v_60fps]")
         final_v_label = "[v_60fps]"
 
     cmd = [
@@ -468,8 +468,9 @@ def apply_speed_curve(input_video_path, output_video_path, preset='end_slowdown'
     cmd.extend([
         "-c:v", "libx264",
         "-preset", "ultrafast",
-        "-crf", "20",
+        "-crf", "22",
         "-pix_fmt", "yuv420p",
+        "-threads", "0",
         "-movflags", "+faststart",
         output_video_path
     ])
@@ -477,6 +478,7 @@ def apply_speed_curve(input_video_path, output_video_path, preset='end_slowdown'
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
 
     time_pattern = re.compile(r"time=(\d+):(\d+):(\d+\.\d+)")
+    all_stderr = []
 
     while True:
         if cancel_check and cancel_check():
@@ -487,6 +489,11 @@ def apply_speed_curve(input_video_path, output_video_path, preset='end_slowdown'
         if not line and process.poll() is not None:
             break
             
+        if line:
+            all_stderr.append(line.strip())
+            if len(all_stderr) > 20:
+                all_stderr.pop(0)
+
         if "time=" in line:
             match = time_pattern.search(line)
             if match and est_output_duration > 0:
@@ -502,7 +509,8 @@ def apply_speed_curve(input_video_path, output_video_path, preset='end_slowdown'
 
     retcode = process.poll()
     if retcode != 0:
-        raise Exception("FFmpeg processing failed to complete.")
+        err_msg = " ".join(all_stderr[-5:]) if all_stderr else "FFmpeg failed."
+        raise Exception(f"FFmpeg processing error: {err_msg}")
 
     if not os.path.exists(output_video_path):
         raise Exception("Output video file was not generated.")
