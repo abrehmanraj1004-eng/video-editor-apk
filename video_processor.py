@@ -132,25 +132,25 @@ def download_youtube_video(url, output_dir, resolution='best', progress_callback
 
     out_template = os.path.join(output_dir, '%(title).80s [%(id)s].%(ext)s')
 
-    # Multi-client configurations to guarantee 403 bypass on Cloud servers
+    # Multi-client configurations to guarantee 403 bypass and format availability
     client_strategies = [
-        {
-            'client': ['ios'],
-            'ua': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
-            'fmt': 'best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best'
-        },
         {
             'client': ['android'],
             'ua': 'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36',
-            'fmt': 'best[ext=mp4]/best'
+            'fmt': 'bestvideo*+bestaudio/best'
+        },
+        {
+            'client': ['ios'],
+            'ua': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+            'fmt': 'best'
         },
         {
             'client': ['tv_embedded'],
             'ua': 'Mozilla/5.0 (SmartHub; SMART-TV; U; Linux/SmartTV) AppleWebKit/538.1+ (KHTML, like Gecko) TV Safari/538.1+',
-            'fmt': 'best'
+            'fmt': 'bestvideo*+bestaudio/best'
         },
         {
-            'client': ['mweb', 'web'],
+            'client': ['web', 'mweb'],
             'ua': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
             'fmt': 'bv*+ba/b/best'
         }
